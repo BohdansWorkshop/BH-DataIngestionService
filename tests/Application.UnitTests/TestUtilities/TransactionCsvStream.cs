@@ -7,7 +7,7 @@ internal sealed class TransactionCsvStream : Stream
 {
     private readonly IEnumerator<string> rows;
     private readonly Queue<byte> buffer = new();
-    private bool disposed;
+    private bool _disposed;
 
     public TransactionCsvStream(IEnumerable<TransactionRequest> transactions)
     {
@@ -87,10 +87,10 @@ internal sealed class TransactionCsvStream : Stream
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !disposed)
+        if (disposing && !_disposed)
         {
             rows.Dispose();
-            disposed = true;
+            _disposed = true;
         }
 
         base.Dispose(disposing);

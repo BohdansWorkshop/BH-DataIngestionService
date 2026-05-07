@@ -1,8 +1,10 @@
 using BH_DataIngestionService.Application.Services;
+using BH_DataIngestionService.Application.Services.Stats;
+using BH_DataIngestionService.Application.UnitTests.TestUtilities;
 using BH_DataIngestionService.Domain.Entities;
 using Xunit;
 
-namespace BH_DataIngestionService.Application.UnitTests;
+namespace BH_DataIngestionService.Application.UnitTests.Services.Stats;
 
 public sealed class StatsServiceTests
 {

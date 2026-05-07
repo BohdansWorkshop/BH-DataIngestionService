@@ -1,4 +1,4 @@
-namespace BH_DataIngestionService.Application.Services;
+namespace BH_DataIngestionService.Application.Services.Ingestion;
 
 internal sealed class BatchTransactionRow
 {

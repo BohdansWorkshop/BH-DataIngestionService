@@ -1,10 +1,11 @@
 using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Application.Exceptions;
-using BH_DataIngestionService.Application.Services;
+using BH_DataIngestionService.Application.Services.Ingestion;
+using BH_DataIngestionService.Application.UnitTests.TestUtilities;
 using BH_DataIngestionService.Application.Validation;
 using Xunit;
 
-namespace BH_DataIngestionService.Application.UnitTests;
+namespace BH_DataIngestionService.Application.UnitTests.Services.Ingestion;
 
 public sealed class TransactionIngestionServiceTests
 {

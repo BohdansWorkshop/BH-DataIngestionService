@@ -1,12 +1,14 @@
 using BH_DataIngestionService.Application.DTOs;
-using BH_DataIngestionService.Application.Services;
+using BH_DataIngestionService.Application.Services.Ingestion;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BH_DataIngestionService.Web.Controllers;
 
 [ApiController]
 [Route("ingest")]
-public sealed class IngestController(TransactionIngestionService ingestionService) : ControllerBase
+public sealed class IngestController(
+    TransactionIngestionService ingestionService,
+    TransactionLoadGenerationService loadGenerationService) : ControllerBase
 {
     [HttpPost("transaction")]
     public async Task<IActionResult> IngestTransaction(
@@ -34,7 +36,7 @@ public sealed class IngestController(TransactionIngestionService ingestionServic
     [HttpPost("generate-load")]
     public async Task<IActionResult> GenerateLoad(CancellationToken cancellationToken)
     {
-        var response = await ingestionService.GenerateLoadAsync(cancellationToken);
+        var response = await loadGenerationService.GenerateLoadAsync(cancellationToken);
         return Ok(response);
     }
 }

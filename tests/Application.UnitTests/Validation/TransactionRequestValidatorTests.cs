@@ -2,7 +2,7 @@ using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Application.Validation;
 using Xunit;
 
-namespace BH_DataIngestionService.Application.UnitTests;
+namespace BH_DataIngestionService.Application.UnitTests.Validation;
 
 public sealed class TransactionRequestValidatorTests
 {

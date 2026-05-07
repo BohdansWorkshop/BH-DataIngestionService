@@ -8,11 +8,17 @@ public sealed class GlobalExceptionMiddleware(
     RequestDelegate next,
     ILogger<GlobalExceptionMiddleware> logger)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task InvokeAsync(HttpContext context)
     {
         try
         {
             await next(context);
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            throw;
         }
         catch (ValidationException exception)
         {
@@ -44,7 +50,6 @@ public sealed class GlobalExceptionMiddleware(
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
 
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        await JsonSerializer.SerializeAsync(context.Response.Body, error, options);
+        await JsonSerializer.SerializeAsync(context.Response.Body, error, JsonOptions, context.RequestAborted);
     }
 }

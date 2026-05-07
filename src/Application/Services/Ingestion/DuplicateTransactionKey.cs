@@ -1,9 +1,9 @@
 using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Domain.Entities;
 
-namespace BH_DataIngestionService.Application.Services;
+namespace BH_DataIngestionService.Application.Services.Ingestion;
 
-internal sealed record DuplicateTransactionKey(
+internal readonly record struct DuplicateTransactionKey(
     string CustomerId,
     DateTimeOffset TransactionDate,
     decimal Amount,

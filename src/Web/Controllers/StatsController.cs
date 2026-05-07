@@ -1,4 +1,4 @@
-using BH_DataIngestionService.Application.Services;
+using BH_DataIngestionService.Application.Services.Stats;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BH_DataIngestionService.Web.Controllers;

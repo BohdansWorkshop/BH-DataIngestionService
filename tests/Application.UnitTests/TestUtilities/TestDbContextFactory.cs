@@ -1,7 +1,7 @@
 using BH_DataIngestionService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace BH_DataIngestionService.Application.UnitTests;
+namespace BH_DataIngestionService.Application.UnitTests.TestUtilities;
 
 internal static class TestDbContextFactory
 {

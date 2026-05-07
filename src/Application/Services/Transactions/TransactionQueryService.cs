@@ -2,7 +2,7 @@ using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace BH_DataIngestionService.Application.Services;
+namespace BH_DataIngestionService.Application.Services.Transactions;
 
 public sealed class TransactionQueryService(ApplicationDbContext dbContext)
 {
