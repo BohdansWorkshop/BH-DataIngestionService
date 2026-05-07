@@ -5,6 +5,11 @@ public sealed record BatchIngestResponse(
     int RejectedCount,
     IReadOnlyList<RowError> Errors);
 
+public sealed record GenerateLoadResponse(
+    int TotalGenerated,
+    int TotalInserted,
+    double DurationMs);
+
 public sealed record RowError(
     int RowNumber,
     string ErrorCode,

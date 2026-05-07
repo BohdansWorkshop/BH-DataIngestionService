@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Application.Exceptions;
@@ -18,7 +19,10 @@ public sealed class TransactionIngestionService(
     IValidator<TransactionRequest> validator)
 {
     private const int BatchSize = 750;
+    private const int LoadGenerationCount = 100_000;
     private const string UniqueViolationSqlState = "23505";
+    private static readonly string[] LoadCurrencies = ["USD", "EUR", "UAH"];
+    private static readonly string[] LoadSourceChannels = ["WEB", "MOBILE", "API"];
 
     public async Task<TransactionResponse> IngestAsync(TransactionRequest request, CancellationToken cancellationToken)
     {
@@ -122,6 +126,39 @@ public sealed class TransactionIngestionService(
         return new BatchIngestResponse(acceptedCount, errors.Count, errors);
     }
 
+    public async Task<GenerateLoadResponse> GenerateLoadAsync(CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var totalInserted = 0;
+        var errors = new List<RowError>();
+        var pendingBatch = new List<(int RowNumber, TransactionRequest Request)>(BatchSize);
+
+        for (var index = 1; index <= LoadGenerationCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            pendingBatch.Add((index, GenerateTransactionRequest(index)));
+
+            if (pendingBatch.Count >= BatchSize)
+            {
+                totalInserted += await SaveBatchAsync(pendingBatch, errors, cancellationToken);
+                pendingBatch.Clear();
+            }
+        }
+
+        if (pendingBatch.Count > 0)
+        {
+            totalInserted += await SaveBatchAsync(pendingBatch, errors, cancellationToken);
+        }
+
+        stopwatch.Stop();
+
+        return new GenerateLoadResponse(
+            LoadGenerationCount,
+            totalInserted,
+            stopwatch.Elapsed.TotalMilliseconds);
+    }
+
     private async Task<int> SaveBatchAsync(
         IReadOnlyList<(int RowNumber, TransactionRequest Request)> batchRows,
         List<RowError> errors,
@@ -161,6 +198,19 @@ public sealed class TransactionIngestionService(
             dbContext.ChangeTracker.Clear();
             return await SaveRowsIndividuallyAfterConflictAsync(batchRows, errors, cancellationToken);
         }
+    }
+
+    private static TransactionRequest GenerateTransactionRequest(int index)
+    {
+        var transactionDate = DateTimeOffset.UtcNow.AddSeconds(-Random.Shared.Next(0, 30 * 24 * 60 * 60));
+        var amount = Random.Shared.Next(100, 100_001) / 100m;
+
+        return new TransactionRequest(
+            $"TEST-CUST-{index:D6}",
+            transactionDate,
+            amount,
+            LoadCurrencies[Random.Shared.Next(LoadCurrencies.Length)],
+            LoadSourceChannels[Random.Shared.Next(LoadSourceChannels.Length)]);
     }
 
     private async Task<int> SaveRowsIndividuallyAfterConflictAsync(

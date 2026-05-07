@@ -30,4 +30,11 @@ public sealed class IngestController(TransactionIngestionService ingestionServic
         var response = await ingestionService.IngestBatchAsync(stream, cancellationToken);
         return Ok(response);
     }
+
+    [HttpPost("generate-load")]
+    public async Task<IActionResult> GenerateLoad(CancellationToken cancellationToken)
+    {
+        var response = await ingestionService.GenerateLoadAsync(cancellationToken);
+        return Ok(response);
+    }
 }
