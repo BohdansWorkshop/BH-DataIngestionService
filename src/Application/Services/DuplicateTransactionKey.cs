@@ -10,14 +10,14 @@ internal sealed record DuplicateTransactionKey(
     string Currency,
     string SourceChannel)
 {
-    public static DuplicateTransactionKey FromRequest(TransactionRequest request)
+    public static DuplicateTransactionKey FromRequest(TransactionRequest normalizedRequest)
     {
         return new DuplicateTransactionKey(
-            request.CustomerId!.Trim(),
-            request.TransactionDate,
-            request.Amount,
-            request.Currency!.Trim().ToUpperInvariant(),
-            request.SourceChannel!.Trim());
+            normalizedRequest.CustomerId!,
+            normalizedRequest.TransactionDate,
+            normalizedRequest.Amount,
+            normalizedRequest.Currency!,
+            normalizedRequest.SourceChannel!);
     }
 
     public static DuplicateTransactionKey FromTransaction(Transaction transaction)

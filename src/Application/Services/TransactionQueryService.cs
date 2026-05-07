@@ -18,29 +18,29 @@ public sealed class TransactionQueryService(ApplicationDbContext dbContext)
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 200);
 
-        var query = dbContext.Transactions
+        var transactionsQuery = dbContext.Transactions
             .AsNoTracking()
             .Where(transaction => transaction.CustomerId == customerId);
 
         if (dateFrom.HasValue)
         {
-            query = query.Where(transaction => transaction.TransactionDate >= dateFrom.Value);
+            transactionsQuery = transactionsQuery.Where(transaction => transaction.TransactionDate >= dateFrom.Value);
         }
 
         if (dateTo.HasValue)
         {
-            query = query.Where(transaction => transaction.TransactionDate <= dateTo.Value);
+            transactionsQuery = transactionsQuery.Where(transaction => transaction.TransactionDate <= dateTo.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(currency))
         {
             var normalizedCurrency = currency.Trim().ToUpperInvariant();
-            query = query.Where(transaction => transaction.Currency == normalizedCurrency);
+            transactionsQuery = transactionsQuery.Where(transaction => transaction.Currency == normalizedCurrency);
         }
 
-        var totalCount = await query.LongCountAsync(cancellationToken);
+        var totalCount = await transactionsQuery.LongCountAsync(cancellationToken);
 
-        var items = await query
+        var items = await transactionsQuery
             .OrderByDescending(transaction => transaction.TransactionDate)
             .ThenBy(transaction => transaction.Id)
             .Skip((page - 1) * pageSize)

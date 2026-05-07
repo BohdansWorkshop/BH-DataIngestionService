@@ -57,8 +57,8 @@ public sealed class TransactionIngestionService(
 
         var acceptedCount = 0;
         var errors = new List<RowError>();
-        var pending = new List<(int RowNumber, TransactionRequest Request)>(BatchSize);
-        var seenInFile = new HashSet<DuplicateTransactionKey>();
+        var pendingBatch = new List<(int RowNumber, TransactionRequest Request)>(BatchSize);
+        var duplicateKeysSeenInFile = new HashSet<DuplicateTransactionKey>();
 
         await csv.ReadAsync();
         csv.ReadHeader();
@@ -68,11 +68,11 @@ public sealed class TransactionIngestionService(
             cancellationToken.ThrowIfCancellationRequested();
 
             var rowNumber = csv.Context.Parser?.Row ?? 0;
-            BatchTransactionRow row;
+            BatchTransactionRow csvRow;
 
             try
             {
-                row = csv.GetRecord<BatchTransactionRow>();
+                csvRow = csv.GetRecord<BatchTransactionRow>();
             }
             catch (Exception exception) when (exception is CsvHelperException or FormatException)
             {
@@ -81,11 +81,11 @@ public sealed class TransactionIngestionService(
             }
 
             var request = new TransactionRequest(
-                row.CustomerId,
-                row.TransactionDate,
-                row.Amount,
-                row.Currency,
-                row.SourceChannel);
+                csvRow.CustomerId,
+                csvRow.TransactionDate,
+                csvRow.Amount,
+                csvRow.Currency,
+                csvRow.SourceChannel);
 
             TransactionRequest normalizedRequest;
             try
@@ -98,88 +98,88 @@ public sealed class TransactionIngestionService(
                 continue;
             }
 
-            var key = DuplicateTransactionKey.FromRequest(normalizedRequest);
-            if (!seenInFile.Add(key))
+            var duplicateKey = DuplicateTransactionKey.FromRequest(normalizedRequest);
+            if (!duplicateKeysSeenInFile.Add(duplicateKey))
             {
                 errors.Add(new RowError(rowNumber, "DUPLICATE_TRANSACTION", "Duplicate transaction in uploaded CSV."));
                 continue;
             }
 
-            pending.Add((rowNumber, normalizedRequest));
+            pendingBatch.Add((rowNumber, normalizedRequest));
 
-            if (pending.Count >= BatchSize)
+            if (pendingBatch.Count >= BatchSize)
             {
-                acceptedCount += await SaveBatchAsync(pending, errors, cancellationToken);
-                pending.Clear();
+                acceptedCount += await SaveBatchAsync(pendingBatch, errors, cancellationToken);
+                pendingBatch.Clear();
             }
         }
 
-        if (pending.Count > 0)
+        if (pendingBatch.Count > 0)
         {
-            acceptedCount += await SaveBatchAsync(pending, errors, cancellationToken);
+            acceptedCount += await SaveBatchAsync(pendingBatch, errors, cancellationToken);
         }
 
         return new BatchIngestResponse(acceptedCount, errors.Count, errors);
     }
 
     private async Task<int> SaveBatchAsync(
-        IReadOnlyList<(int RowNumber, TransactionRequest Request)> rows,
+        IReadOnlyList<(int RowNumber, TransactionRequest Request)> batchRows,
         List<RowError> errors,
         CancellationToken cancellationToken)
     {
-        var keys = rows.Select(row => DuplicateTransactionKey.FromRequest(row.Request)).ToList();
-        var existingKeys = await LoadExistingKeysAsync(keys, cancellationToken);
-        var acceptedRows = new List<Transaction>(rows.Count);
+        var duplicateKeys = batchRows.Select(batchRow => DuplicateTransactionKey.FromRequest(batchRow.Request)).ToList();
+        var existingDuplicateKeys = await LoadExistingDuplicateKeysAsync(duplicateKeys, cancellationToken);
+        var transactionsToInsert = new List<Transaction>(batchRows.Count);
 
-        foreach (var row in rows)
+        foreach (var batchRow in batchRows)
         {
-            var key = DuplicateTransactionKey.FromRequest(row.Request);
-            if (existingKeys.Contains(key))
+            var duplicateKey = DuplicateTransactionKey.FromRequest(batchRow.Request);
+            if (existingDuplicateKeys.Contains(duplicateKey))
             {
-                errors.Add(new RowError(row.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
+                errors.Add(new RowError(batchRow.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
                 continue;
             }
 
-            acceptedRows.Add(CreateTransaction(row.Request));
+            transactionsToInsert.Add(CreateTransaction(batchRow.Request));
         }
 
-        if (acceptedRows.Count == 0)
+        if (transactionsToInsert.Count == 0)
         {
             return 0;
         }
 
-        dbContext.Transactions.AddRange(acceptedRows);
+        dbContext.Transactions.AddRange(transactionsToInsert);
 
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
             dbContext.ChangeTracker.Clear();
-            return acceptedRows.Count;
+            return transactionsToInsert.Count;
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
             dbContext.ChangeTracker.Clear();
-            return await SaveRowsIndividuallyAfterConflictAsync(rows, errors, cancellationToken);
+            return await SaveRowsIndividuallyAfterConflictAsync(batchRows, errors, cancellationToken);
         }
     }
 
     private async Task<int> SaveRowsIndividuallyAfterConflictAsync(
-        IReadOnlyList<(int RowNumber, TransactionRequest Request)> rows,
+        IReadOnlyList<(int RowNumber, TransactionRequest Request)> batchRows,
         List<RowError> errors,
         CancellationToken cancellationToken)
     {
         var acceptedCount = 0;
 
-        foreach (var row in rows)
+        foreach (var batchRow in batchRows)
         {
-            var key = DuplicateTransactionKey.FromRequest(row.Request);
-            if (await ExistsAsync(key, cancellationToken))
+            var duplicateKey = DuplicateTransactionKey.FromRequest(batchRow.Request);
+            if (await ExistsAsync(duplicateKey, cancellationToken))
             {
-                errors.Add(new RowError(row.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
+                errors.Add(new RowError(batchRow.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
                 continue;
             }
 
-            dbContext.Transactions.Add(CreateTransaction(row.Request));
+            dbContext.Transactions.Add(CreateTransaction(batchRow.Request));
 
             try
             {
@@ -190,50 +190,50 @@ public sealed class TransactionIngestionService(
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
                 dbContext.ChangeTracker.Clear();
-                errors.Add(new RowError(row.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
+                errors.Add(new RowError(batchRow.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
             }
         }
 
         return acceptedCount;
     }
 
-    private async Task<HashSet<DuplicateTransactionKey>> LoadExistingKeysAsync(
-        IReadOnlyCollection<DuplicateTransactionKey> keys,
+    private async Task<HashSet<DuplicateTransactionKey>> LoadExistingDuplicateKeysAsync(
+        IReadOnlyCollection<DuplicateTransactionKey> duplicateKeys,
         CancellationToken cancellationToken)
     {
-        if (keys.Count == 0)
+        if (duplicateKeys.Count == 0)
         {
             return [];
         }
 
-        var customerIds = keys.Select(key => key.CustomerId).Distinct().ToArray();
-        var currencies = keys.Select(key => key.Currency).Distinct().ToArray();
-        var sourceChannels = keys.Select(key => key.SourceChannel).Distinct().ToArray();
-        var dates = keys.Select(key => key.TransactionDate).Distinct().ToArray();
+        var customerIds = duplicateKeys.Select(duplicateKey => duplicateKey.CustomerId).Distinct().ToArray();
+        var transactionDates = duplicateKeys.Select(duplicateKey => duplicateKey.TransactionDate).Distinct().ToArray();
+        var currencies = duplicateKeys.Select(duplicateKey => duplicateKey.Currency).Distinct().ToArray();
+        var sourceChannels = duplicateKeys.Select(duplicateKey => duplicateKey.SourceChannel).Distinct().ToArray();
 
         var candidates = await dbContext.Transactions
             .AsNoTracking()
             .Where(transaction =>
                 customerIds.Contains(transaction.CustomerId) &&
+                transactionDates.Contains(transaction.TransactionDate) &&
                 currencies.Contains(transaction.Currency) &&
-                sourceChannels.Contains(transaction.SourceChannel) &&
-                dates.Contains(transaction.TransactionDate))
+                sourceChannels.Contains(transaction.SourceChannel))
             .ToListAsync(cancellationToken);
 
         return candidates
             .Select(DuplicateTransactionKey.FromTransaction)
-            .Where(keys.Contains)
+            .Where(duplicateKeys.Contains)
             .ToHashSet();
     }
 
-    private Task<bool> ExistsAsync(DuplicateTransactionKey key, CancellationToken cancellationToken)
+    private Task<bool> ExistsAsync(DuplicateTransactionKey duplicateKey, CancellationToken cancellationToken)
     {
         return dbContext.Transactions.AnyAsync(transaction =>
-            transaction.CustomerId == key.CustomerId &&
-            transaction.TransactionDate == key.TransactionDate &&
-            transaction.Amount == key.Amount &&
-            transaction.Currency == key.Currency &&
-            transaction.SourceChannel == key.SourceChannel,
+            transaction.CustomerId == duplicateKey.CustomerId &&
+            transaction.TransactionDate == duplicateKey.TransactionDate &&
+            transaction.Amount == duplicateKey.Amount &&
+            transaction.Currency == duplicateKey.Currency &&
+            transaction.SourceChannel == duplicateKey.SourceChannel,
             cancellationToken);
     }
 

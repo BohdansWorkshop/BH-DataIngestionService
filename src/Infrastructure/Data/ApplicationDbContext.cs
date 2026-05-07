@@ -14,29 +14,37 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         builder.Entity<Transaction>(entity =>
         {
             entity.ToTable("transactions");
+
             entity.HasKey(transaction => transaction.Id);
 
             entity.Property(transaction => transaction.CustomerId)
-                .HasMaxLength(100)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(transaction => transaction.TransactionDate)
                 .IsRequired();
 
             entity.Property(transaction => transaction.Amount)
-                .HasPrecision(18, 2)
-                .IsRequired();
+                .IsRequired()
+                .HasPrecision(18, 2);
 
             entity.Property(transaction => transaction.Currency)
-                .HasMaxLength(3)
-                .IsRequired();
+                .IsRequired()
+                .HasMaxLength(3);
 
             entity.Property(transaction => transaction.SourceChannel)
-                .HasMaxLength(50)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(transaction => transaction.CreatedAtUtc)
                 .IsRequired();
 
-            entity.Property(transaction => transaction.TransactionDate).IsRequired();
-            entity.Property(transaction => transaction.CreatedAtUtc).IsRequired();
-
-            entity.HasIndex(transaction => transaction.CustomerId);
-            entity.HasIndex(transaction => transaction.TransactionDate);
+            entity.HasIndex(transaction => new
+                {
+                    transaction.CustomerId,
+                    transaction.TransactionDate
+                })
+                .HasDatabaseName("ix_transactions_customer_date");
 
             entity.HasIndex(transaction => new
                 {
