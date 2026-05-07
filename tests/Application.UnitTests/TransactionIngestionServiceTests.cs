@@ -12,7 +12,7 @@ public sealed class TransactionIngestionServiceTests
     public async Task IngestAsync_rejects_duplicate_transaction()
     {
         await using var dbContext = TestDbContextFactory.Create();
-        var service = new TransactionIngestionService(dbContext, new TransactionValidator());
+        var service = new TransactionIngestionService(dbContext, new TransactionRequestValidator());
         var request = new TransactionRequest(
             "customer-1",
             DateTimeOffset.UtcNow.AddDays(-1),
@@ -30,7 +30,7 @@ public sealed class TransactionIngestionServiceTests
     public async Task IngestBatchAsync_streams_rows_and_reports_invalid_rows()
     {
         await using var dbContext = TestDbContextFactory.Create();
-        var service = new TransactionIngestionService(dbContext, new TransactionValidator());
+        var service = new TransactionIngestionService(dbContext, new TransactionRequestValidator());
         const string csv = """
                            CustomerId,TransactionDate,Amount,Currency,SourceChannel
                            C1,2024-01-01T00:00:00Z,10.00,USD,web

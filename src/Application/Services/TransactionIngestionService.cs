@@ -6,29 +6,31 @@ using BH_DataIngestionService.Domain.Entities;
 using BH_DataIngestionService.Infrastructure.Data;
 using CsvHelper;
 using CsvHelper.Configuration;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using AppValidationException = BH_DataIngestionService.Application.Exceptions.ValidationException;
 
 namespace BH_DataIngestionService.Application.Services;
 
 public sealed class TransactionIngestionService(
     ApplicationDbContext dbContext,
-    TransactionValidator validator)
+    IValidator<TransactionRequest> validator)
 {
     private const int BatchSize = 750;
     private const string UniqueViolationSqlState = "23505";
 
     public async Task<TransactionResponse> IngestAsync(TransactionRequest request, CancellationToken cancellationToken)
     {
-        validator.ThrowIfInvalid(request);
-        var key = DuplicateTransactionKey.FromRequest(request);
+        var normalizedRequest = await ValidateAndNormalizeAsync(request, cancellationToken);
+        var key = DuplicateTransactionKey.FromRequest(normalizedRequest);
 
         if (await ExistsAsync(key, cancellationToken))
         {
             throw new DuplicateTransactionException();
         }
 
-        var transaction = CreateTransaction(request);
+        var transaction = CreateTransaction(normalizedRequest);
         dbContext.Transactions.Add(transaction);
 
         try
@@ -85,21 +87,25 @@ public sealed class TransactionIngestionService(
                 row.Currency,
                 row.SourceChannel);
 
-            var validationErrors = validator.Validate(request);
-            if (validationErrors.Count > 0)
+            TransactionRequest normalizedRequest;
+            try
             {
-                errors.Add(new RowError(rowNumber, "VALIDATION_ERROR", "Invalid transaction.", validationErrors));
+                normalizedRequest = await ValidateAndNormalizeAsync(request, cancellationToken);
+            }
+            catch (AppValidationException exception)
+            {
+                errors.Add(new RowError(rowNumber, "VALIDATION_ERROR", "Invalid transaction.", exception.Errors));
                 continue;
             }
 
-            var key = DuplicateTransactionKey.FromRequest(request);
+            var key = DuplicateTransactionKey.FromRequest(normalizedRequest);
             if (!seenInFile.Add(key))
             {
                 errors.Add(new RowError(rowNumber, "DUPLICATE_TRANSACTION", "Duplicate transaction in uploaded CSV."));
                 continue;
             }
 
-            pending.Add((rowNumber, request));
+            pending.Add((rowNumber, normalizedRequest));
 
             if (pending.Count >= BatchSize)
             {
@@ -229,15 +235,33 @@ public sealed class TransactionIngestionService(
             cancellationToken);
     }
 
+    private async Task<TransactionRequest> ValidateAndNormalizeAsync(
+        TransactionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await validator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            throw new AppValidationException("Invalid transaction.", validationResult.ToErrorDictionary());
+        }
+
+        return request with
+        {
+            CustomerId = request.CustomerId!.Trim(),
+            Currency = request.Currency!.Trim().ToUpperInvariant(),
+            SourceChannel = request.SourceChannel!.Trim()
+        };
+    }
+
     private static Transaction CreateTransaction(TransactionRequest request)
     {
         return new Transaction
         {
-            CustomerId = request.CustomerId!.Trim(),
+            CustomerId = request.CustomerId!,
             TransactionDate = request.TransactionDate,
             Amount = request.Amount,
-            Currency = request.Currency!.Trim().ToUpperInvariant(),
-            SourceChannel = request.SourceChannel!.Trim(),
+            Currency = request.Currency!,
+            SourceChannel = request.SourceChannel!,
             CreatedAtUtc = DateTimeOffset.UtcNow
         };
     }
