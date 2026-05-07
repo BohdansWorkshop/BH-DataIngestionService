@@ -153,6 +153,7 @@ public sealed class TransactionIngestionService(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
             return acceptedRows.Count;
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
@@ -183,6 +184,7 @@ public sealed class TransactionIngestionService(
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
+                dbContext.ChangeTracker.Clear();
                 acceptedCount++;
             }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
