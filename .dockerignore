@@ -1,0 +1,6 @@
+artifacts
+.vs
+.idea
+.devcontainer
+**/bin
+**/obj

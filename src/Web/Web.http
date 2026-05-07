@@ -1,0 +1,22 @@
+@Web_HostAddress = http://localhost:5135
+
+### Health
+GET {{Web_HostAddress}}/
+
+### Single transaction ingestion
+POST {{Web_HostAddress}}/ingest/transaction
+Content-Type: application/json
+
+{
+  "customerId": "C1",
+  "transactionDate": "2024-01-01T12:00:00Z",
+  "amount": 10.50,
+  "currency": "USD",
+  "sourceChannel": "web"
+}
+
+### Customer transactions
+GET {{Web_HostAddress}}/customers/C1/transactions?page=1&pageSize=50&currency=USD
+
+### Stats
+GET {{Web_HostAddress}}/stats/summary

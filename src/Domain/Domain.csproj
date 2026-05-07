@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BH_DataIngestionService.Domain</RootNamespace>
+    <AssemblyName>BH_DataIngestionService.Domain</AssemblyName>
+  </PropertyGroup>
+
+</Project>
