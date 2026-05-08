@@ -86,3 +86,8 @@ Several issues introduced by AI suggestions were identified and corrected during
 - Incorrect test design for duplicate transaction validation using EF InMemory provider: the AI-suggested test assumed relational database behavior (unique constraint enforcement and DbUpdateException on duplicates). This was not valid in the chosen test setup, since the InMemory provider does not enforce database constraints. The test was therefore replaced with a deterministic unit test focusing on batch-level deduplication logic.
 - Avoidance of SaveChanges per CSV row in the normal ingestion path to prevent performance degradation
 - Clarification of duplicate handling strategy: enforced both at application level (batch deduplication) and at database level (unique index constraint)
+
+## The following tools and libraries were used in the implementation:
+
+- FluentValidation — for structured and centralized validation of transaction input models, ensuring consistent business rules across single and batch ingestion flows.
+- Bogus — for generating realistic synthetic transaction data used in the load generation endpoint and testing scenarios.
