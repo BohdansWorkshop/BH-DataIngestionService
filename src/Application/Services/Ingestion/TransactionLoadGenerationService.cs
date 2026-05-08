@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using BH_DataIngestionService.Application.DTOs;
+using BH_DataIngestionService.Application.Services.Ingestion.DTO;
 
 namespace BH_DataIngestionService.Application.Services.Ingestion;
 

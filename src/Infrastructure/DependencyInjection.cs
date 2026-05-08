@@ -1,8 +1,9 @@
 using BH_DataIngestionService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace BH_DataIngestionService.Infrastructure;
 
 public static class DependencyInjection
 {

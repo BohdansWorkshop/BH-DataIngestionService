@@ -1,4 +1,4 @@
-namespace BH_DataIngestionService.Application.DTOs;
+namespace BH_DataIngestionService.Application.Services.Ingestion.DTO;
 
 public sealed record BatchIngestResponse(
     int AcceptedCount,

@@ -1,6 +1,7 @@
 using System.Globalization;
 using BH_DataIngestionService.Application.DTOs;
 using BH_DataIngestionService.Application.Exceptions;
+using BH_DataIngestionService.Application.Services.Ingestion.DTO;
 using BH_DataIngestionService.Application.Validation;
 using BH_DataIngestionService.Domain.Entities;
 using BH_DataIngestionService.Infrastructure.Data;
@@ -18,29 +19,19 @@ public sealed class TransactionIngestionService(
     IValidator<TransactionRequest> validator)
 {
     private const int BatchSize = 750;
-    private const string UniqueViolationSqlState = "23505";
 
     public async Task<TransactionResponse> IngestAsync(TransactionRequest request, CancellationToken cancellationToken)
     {
         var normalizedRequest = await ValidateAndNormalizeAsync(request, cancellationToken);
-
-        if (RequiresApplicationDuplicateCheck() &&
-            await ExistsAsync(DuplicateTransactionKey.FromRequest(normalizedRequest), cancellationToken))
-        {
-            throw new DuplicateTransactionException();
-        }
-
         var transaction = CreateTransaction(normalizedRequest);
-        dbContext.Transactions.Add(transaction);
 
         try
         {
+            dbContext.Transactions.Add(transaction);
             await dbContext.SaveChangesAsync(cancellationToken);
-            dbContext.ChangeTracker.Clear();
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
-            dbContext.ChangeTracker.Clear();
             throw new DuplicateTransactionException();
         }
 
@@ -50,12 +41,11 @@ public sealed class TransactionIngestionService(
     public async Task<BatchIngestResponse> IngestBatchAsync(Stream csvStream, CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(csvStream);
-        using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
-        {
-            TrimOptions = TrimOptions.Trim,
-            MissingFieldFound = null,
-            HeaderValidated = null
-        });
+        using var csv = new CsvReader(reader,
+            new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                TrimOptions = TrimOptions.Trim, MissingFieldFound = null, HeaderValidated = null
+            });
 
         var batchState = new BatchIngestionState();
         var duplicateKeysSeenInFile = new HashSet<DuplicateTransactionKey>();
@@ -67,7 +57,7 @@ public sealed class TransactionIngestionService(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var rowNumber = csv.Context.Parser?.Row ?? 0;
+            var rowNumber = csv.Parser.Row;
             BatchTransactionRow csvRow;
 
             try
@@ -76,7 +66,8 @@ public sealed class TransactionIngestionService(
             }
             catch (Exception exception) when (exception is CsvHelperException or FormatException)
             {
-                batchState.Errors.Add(new RowError(rowNumber, "CSV_PARSE_ERROR", "CSV row could not be parsed."));
+                batchState.Errors.Add(new RowError(rowNumber, IngestionErrorsConstants.CsvParseErrorTopic,
+                    IngestionErrorsConstants.CsvParseErrorMessage));
                 continue;
             }
 
@@ -91,7 +82,7 @@ public sealed class TransactionIngestionService(
                 rowNumber,
                 request,
                 duplicateKeysSeenInFile,
-                "Duplicate transaction in uploaded CSV.",
+                IngestionErrorsConstants.DuplicateInCsvMessage,
                 batchState,
                 cancellationToken);
         }
@@ -107,7 +98,7 @@ public sealed class TransactionIngestionService(
     {
         var rowNumber = 0;
         var batchState = new BatchIngestionState();
-        var duplicateKeysSeenInBatch = CreateDuplicateKeySet(requests);
+        var duplicateKeysSeenInBatch = new HashSet<DuplicateTransactionKey>();
 
         foreach (var request in requests)
         {
@@ -118,7 +109,7 @@ public sealed class TransactionIngestionService(
                 rowNumber,
                 request,
                 duplicateKeysSeenInBatch,
-                "Duplicate transaction in uploaded batch.",
+                IngestionErrorsConstants.DuplicateInBatchMessage,
                 batchState,
                 cancellationToken);
         }
@@ -143,14 +134,17 @@ public sealed class TransactionIngestionService(
         }
         catch (AppValidationException exception)
         {
-            batchState.Errors.Add(new RowError(rowNumber, "VALIDATION_ERROR", "Invalid transaction.", exception.Errors));
+            batchState.Errors.Add(new RowError(rowNumber, IngestionErrorsConstants.ValidationErrorTopic,
+                IngestionErrorsConstants.InvalidTransactionMessage,
+                exception.Errors));
             return;
         }
 
         var duplicateKey = DuplicateTransactionKey.FromRequest(normalizedRequest);
         if (!duplicateKeysSeen.Add(duplicateKey))
         {
-            batchState.Errors.Add(new RowError(rowNumber, "DUPLICATE_TRANSACTION", duplicateMessage));
+            batchState.Errors.Add(new RowError(rowNumber, IngestionErrorsConstants.DuplicateTransactionTopic,
+                duplicateMessage));
             return;
         }
 
@@ -165,9 +159,7 @@ public sealed class TransactionIngestionService(
     private async Task FlushBatchAsync(BatchIngestionState batchState, CancellationToken cancellationToken)
     {
         if (batchState.PendingRows.Count == 0)
-        {
             return;
-        }
 
         batchState.AcceptedCount += await SaveBatchAsync(batchState.PendingRows, batchState.Errors, cancellationToken);
         batchState.PendingRows.Clear();
@@ -178,34 +170,29 @@ public sealed class TransactionIngestionService(
         ICollection<RowError> errors,
         CancellationToken cancellationToken)
     {
-        if (batchRows.Count == 0)
-        {
-            return 0;
-        }
-
-        var originalAutoDetectChanges = dbContext.ChangeTracker.AutoDetectChangesEnabled;
-        dbContext.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            for (var index = 0; index < batchRows.Count; index++)
-            {
-                dbContext.Transactions.Add(CreateTransaction(batchRows[index].Request));
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            dbContext.ChangeTracker.Clear();
-            return batchRows.Count;
+            return await InsertBatchAsync(batchRows, cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            dbContext.ChangeTracker.Clear();
-            dbContext.ChangeTracker.AutoDetectChangesEnabled = originalAutoDetectChanges;
             return await SaveRowsAfterBatchConflictAsync(batchRows, errors, cancellationToken);
         }
-        finally
-        {
-            dbContext.ChangeTracker.AutoDetectChangesEnabled = originalAutoDetectChanges;
-        }
+    }
+
+    private async Task<int> InsertBatchAsync(
+        IReadOnlyList<PendingTransactionRow> batchRows,
+        CancellationToken cancellationToken)
+    {
+        if (batchRows.Count == 0)
+            return 0;
+
+        dbContext.Transactions.AddRange(
+            batchRows.Select(x => CreateTransaction(x.Request)));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return batchRows.Count;
     }
 
     private async Task<int> SaveRowsAfterBatchConflictAsync(
@@ -215,9 +202,8 @@ public sealed class TransactionIngestionService(
     {
         var acceptedCount = 0;
 
-        for (var index = 0; index < batchRows.Count; index++)
+        foreach (var row in batchRows)
         {
-            var row = batchRows[index];
             dbContext.Transactions.Add(CreateTransaction(row.Request));
 
             try
@@ -227,22 +213,13 @@ public sealed class TransactionIngestionService(
             }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
-                errors.Add(new RowError(row.RowNumber, "DUPLICATE_TRANSACTION", "Transaction already exists."));
-            }
-            finally
-            {
+                errors.Add(new RowError(row.RowNumber, IngestionErrorsConstants.DuplicateTransactionTopic,
+                    IngestionErrorsConstants.DuplicateTransactionMessage));
                 dbContext.ChangeTracker.Clear();
             }
         }
 
         return acceptedCount;
-    }
-
-    private static HashSet<DuplicateTransactionKey> CreateDuplicateKeySet(IEnumerable<TransactionRequest> requests)
-    {
-        return requests is ICollection<TransactionRequest> collection
-            ? new HashSet<DuplicateTransactionKey>(collection.Count)
-            : [];
     }
 
     private async Task<TransactionRequest> ValidateAndNormalizeAsync(
@@ -252,33 +229,23 @@ public sealed class TransactionIngestionService(
         var validationResult = await validator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {
-            throw new AppValidationException("Invalid transaction.", validationResult.ToErrorDictionary());
+            throw new AppValidationException(IngestionErrorsConstants.InvalidTransactionMessage,
+                validationResult.ToErrorDictionary());
         }
 
         return request with
         {
-            CustomerId = request.CustomerId!.Trim(),
+            CustomerId = request.CustomerId.Trim(),
             Currency = request.Currency!.Trim().ToUpperInvariant(),
             SourceChannel = request.SourceChannel!.Trim()
         };
-    }
-
-    private Task<bool> ExistsAsync(DuplicateTransactionKey duplicateKey, CancellationToken cancellationToken)
-    {
-        return dbContext.Transactions.AnyAsync(transaction =>
-            transaction.CustomerId == duplicateKey.CustomerId &&
-            transaction.TransactionDate == duplicateKey.TransactionDate &&
-            transaction.Amount == duplicateKey.Amount &&
-            transaction.Currency == duplicateKey.Currency &&
-            transaction.SourceChannel == duplicateKey.SourceChannel,
-            cancellationToken);
     }
 
     private static Transaction CreateTransaction(TransactionRequest request)
     {
         return new Transaction
         {
-            CustomerId = request.CustomerId!,
+            CustomerId = request.CustomerId,
             TransactionDate = request.TransactionDate,
             Amount = request.Amount,
             Currency = request.Currency!,
@@ -302,25 +269,6 @@ public sealed class TransactionIngestionService(
     private static bool IsUniqueViolation(DbUpdateException exception)
     {
         return exception.InnerException is PostgresException postgresException &&
-               postgresException.SqlState == UniqueViolationSqlState;
-    }
-
-    private bool RequiresApplicationDuplicateCheck()
-    {
-        return dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
-    }
-
-    private sealed class BatchIngestionState
-    {
-        public int AcceptedCount { get; set; }
-
-        public List<PendingTransactionRow> PendingRows { get; } = new(BatchSize);
-
-        public List<RowError> Errors { get; } = [];
-
-        public BatchIngestResponse ToResponse()
-        {
-            return new BatchIngestResponse(AcceptedCount, Errors.Count, Errors);
-        }
+               postgresException.SqlState == PostgresErrorCodes.UniqueViolation;
     }
 }

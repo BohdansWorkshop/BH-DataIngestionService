@@ -1,8 +1,8 @@
-namespace BH_DataIngestionService.Application.Services.Ingestion;
+namespace BH_DataIngestionService.Application.Services.Ingestion.DTO;
 
 internal sealed class BatchTransactionRow
 {
-    public string? CustomerId { get; set; }
+    public required string CustomerId { get; set; }
 
     public DateTimeOffset TransactionDate { get; set; }
 

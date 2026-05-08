@@ -1,10 +1,10 @@
-using BH_DataIngestionService.Application.Services;
 using BH_DataIngestionService.Application.Services.Ingestion;
 using BH_DataIngestionService.Application.Services.Stats;
 using BH_DataIngestionService.Application.Services.Transactions;
 using FluentValidation;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace BH_DataIngestionService.Application;
 
 public static class DependencyInjection
 {

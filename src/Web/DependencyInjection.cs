@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace BH_DataIngestionService.Web;
 
 public static class DependencyInjection
 {

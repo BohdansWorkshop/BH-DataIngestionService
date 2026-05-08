@@ -19,7 +19,7 @@ public sealed class TransactionTestDataGenerator
         }
     }
 
-    public TransactionRequest GenerateTransactionRequest(int index)
+    private TransactionRequest GenerateTransactionRequest(int index)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(index);
 

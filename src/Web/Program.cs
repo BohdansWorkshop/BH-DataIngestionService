@@ -1,4 +1,7 @@
+using BH_DataIngestionService.Application;
+using BH_DataIngestionService.Infrastructure;
 using BH_DataIngestionService.Infrastructure.Data;
+using BH_DataIngestionService.Web;
 using BH_DataIngestionService.Web.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);

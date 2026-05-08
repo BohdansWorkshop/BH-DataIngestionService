@@ -61,10 +61,10 @@ CSV ingestion uses CsvHelper over the request stream and processes rows incremen
 
 ## Trade-Offs
 
-- `Application` references `Infrastructure` so services can use the concrete EF Core context directly. This is less formally layered, but avoids repository abstractions that add little value here.
-- Startup uses `EnsureCreatedAsync` for assignment simplicity. A production service should use migrations.
-- Batch duplicate checks query likely candidates once per batch, then compare exact duplicate keys in memory. This keeps the implementation readable while avoiding a database query per row.
-- On rare concurrent unique conflicts during batch save, the service falls back to per-row inserts for that failed batch to report useful row errors.
+- The Application layer directly references the Infrastructure layer to use the concrete EF Core DbContext. This simplifies the architecture and avoids introducing repository abstractions that would add unnecessary complexity for this scope.
+- The database is initialized using EnsureCreatedAsync to keep the setup simple for the assignment. In a production system, schema management would be handled via EF Core migrations.
+- Batch-level duplicate detection is performed using in-memory HashSet tracking of normalized keys. This avoids per-row database queries while keeping the implementation efficient and readable.
+- In rare cases of concurrent unique constraint violations during batch persistence, the service falls back to per-row inserts for the affected batch segment to ensure accurate error reporting at row level.
 
 ## Future Improvements
 
@@ -76,8 +76,12 @@ CSV ingestion uses CsvHelper over the request stream and processes rows incremen
 
 ## AI Usage
 
-AI tools were used to accelerate the refactor and implementation. The accepted output was the simplified project structure, service-oriented ingestion flow, validation, EF Core configuration, Docker setup, and focused tests.
+- AI tools were used to accelerate the refactoring and implementation process.
+- The accepted output included a simplified project structure, service-oriented ingestion flow, validation layer, EF Core configuration, Docker setup, and focused unit tests.
+- AI-generated project complexity was intentionally reduced. This included MediatR, CQRS folder structure, identity scaffolding, Aspire setup, endpoint scanning, repository/unit-of-work abstractions, domain events, etc.
 
-AI-generated template-style complexity was intentionally removed or modified: MediatR, CQRS folders, identity, Aspire, endpoint scanning, repositories, unit-of-work patterns, domain events, and generated Todo code were discarded.
+Several issues introduced by AI suggestions were identified and corrected during implementation:
 
-Mistakes caught and corrected during the work included keeping package versions aligned to .NET 8 instead of the generated .NET 10 template, avoiding SaveChanges per CSV row in the normal path, and keeping duplicate detection enforced both in application logic and at the database index level.
+- Incorrect test design for duplicate transaction validation using EF InMemory provider: the AI-suggested test assumed relational database behavior (unique constraint enforcement and DbUpdateException on duplicates). This was not valid in the chosen test setup, since the InMemory provider does not enforce database constraints. The test was therefore replaced with a deterministic unit test focusing on batch-level deduplication logic.
+- Avoidance of SaveChanges per CSV row in the normal ingestion path to prevent performance degradation
+- Clarification of duplicate handling strategy: enforced both at application level (batch deduplication) and at database level (unique index constraint)

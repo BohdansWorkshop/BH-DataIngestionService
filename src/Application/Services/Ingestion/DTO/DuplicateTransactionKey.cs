@@ -1,7 +1,6 @@
 using BH_DataIngestionService.Application.DTOs;
-using BH_DataIngestionService.Domain.Entities;
 
-namespace BH_DataIngestionService.Application.Services.Ingestion;
+namespace BH_DataIngestionService.Application.Services.Ingestion.DTO;
 
 internal readonly record struct DuplicateTransactionKey(
     string CustomerId,
@@ -18,15 +17,5 @@ internal readonly record struct DuplicateTransactionKey(
             normalizedRequest.Amount,
             normalizedRequest.Currency!,
             normalizedRequest.SourceChannel!);
-    }
-
-    public static DuplicateTransactionKey FromTransaction(Transaction transaction)
-    {
-        return new DuplicateTransactionKey(
-            transaction.CustomerId,
-            transaction.TransactionDate,
-            transaction.Amount,
-            transaction.Currency,
-            transaction.SourceChannel);
     }
 }

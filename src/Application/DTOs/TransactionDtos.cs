@@ -1,7 +1,7 @@
 namespace BH_DataIngestionService.Application.DTOs;
 
 public sealed record TransactionRequest(
-    string? CustomerId,
+    string CustomerId,
     DateTimeOffset TransactionDate,
     decimal Amount,
     string? Currency,

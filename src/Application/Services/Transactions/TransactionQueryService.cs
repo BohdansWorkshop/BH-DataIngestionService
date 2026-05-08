@@ -38,7 +38,7 @@ public sealed class TransactionQueryService(ApplicationDbContext dbContext)
             transactionsQuery = transactionsQuery.Where(transaction => transaction.Currency == normalizedCurrency);
         }
 
-        var totalCount = await transactionsQuery.LongCountAsync(cancellationToken);
+        var totalCount = await transactionsQuery.CountAsync(cancellationToken);
 
         var items = await transactionsQuery
             .OrderByDescending(transaction => transaction.TransactionDate)

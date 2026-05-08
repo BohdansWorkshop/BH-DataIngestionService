@@ -10,21 +10,31 @@ namespace BH_DataIngestionService.Application.UnitTests.Services.Ingestion;
 public sealed class TransactionIngestionServiceTests
 {
     [Fact]
-    public async Task IngestAsync_rejects_duplicate_transaction()
+    public async Task IngestBatchAsync_filters_duplicates_within_batch()
     {
         await using var dbContext = TestDbContextFactory.Create();
-        var service = new TransactionIngestionService(dbContext, new TransactionRequestValidator());
+
+        var service = new TransactionIngestionService(
+            dbContext,
+            new TransactionRequestValidator());
+
         var request = new TransactionRequest(
             "customer-1",
-            DateTimeOffset.UtcNow.AddDays(-1),
+            new DateTimeOffset(2025, 01, 01, 0, 0, 0, TimeSpan.Zero),
             25.50m,
-            "usd",
+            "USD",
             "web");
 
-        await service.IngestAsync(request, CancellationToken.None);
+        var requests = new[]
+        {
+            request,
+            request
+        };
 
-        await Assert.ThrowsAsync<DuplicateTransactionException>(() =>
-            service.IngestAsync(request, CancellationToken.None));
+        var result = await service.IngestBatchAsync(requests, CancellationToken.None);
+
+        Assert.Equal(1, result.AcceptedCount);
+        Assert.Single(result.Errors);
     }
 
     [Fact]
