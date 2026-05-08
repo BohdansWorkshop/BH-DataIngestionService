@@ -24,6 +24,7 @@ Set `ConnectionStrings__DefaultConnection` if PostgreSQL is not running with the
 ```http
 POST /ingest/transaction
 POST /ingest/batch
+POST /ingest/generate-load (fullfills database with data)
 GET  /customers/{id}/transactions?page=1&pageSize=50&dateFrom=2024-01-01&dateTo=2024-12-31&currency=USD
 GET  /stats/summary
 ```
